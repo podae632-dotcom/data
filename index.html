@@ -1,0 +1,1474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Check your digital exposure and learn how to protect your online accounts.">
+<title>AM I EXPOSED? // breach scanner</title>
+
+<style>
+:root {
+  --bg: #050506;
+  --panel: rgba(14, 8, 9, 0.82);
+  --panel-solid: #0e0809;
+  --panel2: #150a0c;
+  --text: #ffeef0;
+  --muted: #9a7278;
+  --red: #ff2a3c;
+  --red-bright: #ff5a6a;
+  --red-pale: #ff9aa5;
+  --red-soft: rgba(255, 42, 60, 0.12);
+  --red-glow: rgba(255, 42, 60, 0.45);
+  --border: rgba(255, 42, 60, 0.22);
+  --border-strong: rgba(255, 42, 60, 0.5);
+  --amber: #ffb020;
+  --mono: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ================= BACKGROUND LAYERS ================= */
+
+#matrix {
+  position: fixed;
+  inset: 0;
+  z-index: -3;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 520px at 15% -10%, rgba(255, 42, 60, 0.14), transparent 62%),
+    radial-gradient(760px 480px at 92% 8%, rgba(255, 42, 60, 0.09), transparent 60%),
+    radial-gradient(1000px 700px at 50% 120%, rgba(255, 42, 60, 0.10), transparent 65%);
+}
+
+/* CRT scanlines + moving beam */
+.overlay-scan {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(255, 42, 60, 0.045) 0px,
+    rgba(255, 42, 60, 0.045) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: screen;
+  opacity: 0.7;
+}
+
+.overlay-scan::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 160px;
+  background: linear-gradient(180deg, transparent, rgba(255, 42, 60, 0.09), transparent);
+  animation: beam 7s linear infinite;
+}
+
+@keyframes beam {
+  0%   { top: -20%; }
+  100% { top: 120%; }
+}
+
+/* vignette + subtle flicker */
+.overlay-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 91;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 42%, rgba(0, 0, 0, 0.72) 100%);
+  animation: flicker 6s steps(1) infinite;
+}
+
+@keyframes flicker {
+  0%, 96%, 100% { opacity: 1; }
+  97%           { opacity: 0.86; }
+  98%           { opacity: 1; }
+  99%           { opacity: 0.92; }
+}
+
+/* ================= HEADER ================= */
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 5%;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  background: rgba(5, 5, 6, 0.86);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 0.86rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.logo .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 10px var(--red), 0 0 22px var(--red-glow);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.82); }
+}
+
+nav ul {
+  display: flex;
+  gap: 24px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+nav a {
+  color: var(--muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  position: relative;
+  transition: color 0.2s ease, text-shadow 0.2s ease;
+}
+
+nav a::before {
+  content: "//";
+  margin-right: 6px;
+  color: var(--red);
+  opacity: 0.5;
+}
+
+nav a:hover {
+  color: var(--red-bright);
+  text-shadow: 0 0 10px var(--red-glow);
+}
+
+/* HUD readout */
+.hud {
+  display: flex;
+  gap: 18px;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.hud b {
+  color: var(--red-bright);
+  font-weight: 600;
+  text-shadow: 0 0 8px var(--red-glow);
+}
+
+/* ================= LAYOUT ================= */
+
+main { padding: 0 5%; }
+
+section { padding: 70px 0; }
+
+/* ================= HERO ================= */
+
+.hero {
+  max-width: 820px;
+  margin: 0 auto;
+  text-align: center;
+  padding-top: 76px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--red-bright);
+  background: rgba(255, 42, 60, 0.06);
+  border: 1px solid var(--border-strong);
+  padding: 7px 16px;
+  border-radius: 3px;
+  margin-bottom: 26px;
+  box-shadow: 0 0 22px -8px var(--red-glow), inset 0 0 20px -14px var(--red);
+}
+
+.pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  background: var(--red);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--red);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+h1 {
+  font-size: clamp(2rem, 6.6vw, 3.7rem);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  margin: 0 0 20px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--text);
+  text-shadow: 0 0 30px rgba(255, 42, 60, 0.25);
+}
+
+h1 .grad {
+  background: linear-gradient(100deg, #ff2a3c 0%, #ff7a5a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 18px var(--red-glow));
+}
+
+/* glitch layers */
+.glitch {
+  position: relative;
+  display: inline-block;
+}
+
+.glitch::before,
+.glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  pointer-events: none;
+  text-transform: uppercase;
+}
+
+.glitch::before {
+  color: var(--red);
+  transform: translate(-2px, -1px);
+  text-shadow: 0 0 12px var(--red-glow);
+  opacity: 0.8;
+  animation: glitchTop 3.4s steps(1) infinite;
+}
+
+.glitch::after {
+  color: #00e5ff;
+  transform: translate(2px, 1px);
+  opacity: 0.55;
+  animation: glitchBottom 2.8s steps(1) infinite;
+}
+
+@keyframes glitchTop {
+  0%, 100% { clip-path: inset(0 0 92% 0); }
+  8%       { clip-path: inset(14% 0 62% 0); transform: translate(3px, -1px); }
+  12%      { clip-path: inset(4% 0 80% 0);  transform: translate(-3px, 1px); }
+  26%      { clip-path: inset(38% 0 44% 0); transform: translate(2px, 0); }
+  27%      { clip-path: inset(0 0 92% 0); }
+  54%      { clip-path: inset(22% 0 60% 0); transform: translate(-2px, 1px); }
+  56%      { clip-path: inset(0 0 92% 0); }
+  80%      { clip-path: inset(50% 0 30% 0); transform: translate(3px, 0); }
+  82%      { clip-path: inset(0 0 92% 0); }
+}
+
+@keyframes glitchBottom {
+  0%, 100% { clip-path: inset(88% 0 0 0); }
+  10%      { clip-path: inset(62% 0 12% 0); transform: translate(-3px, 1px); }
+  14%      { clip-path: inset(74% 0 4% 0);  transform: translate(3px, -1px); }
+  40%      { clip-path: inset(56% 0 22% 0); transform: translate(-2px, 0); }
+  42%      { clip-path: inset(88% 0 0 0); }
+  70%      { clip-path: inset(66% 0 16% 0); transform: translate(2px, 1px); }
+  72%      { clip-path: inset(88% 0 0 0); }
+}
+
+.lede {
+  color: var(--muted);
+  font-size: 0.94rem;
+  max-width: 580px;
+  margin: 0 auto 36px;
+}
+
+.lede::before { content: "> "; color: var(--red); }
+
+/* ================= FORM ================= */
+
+.check-form {
+  display: flex;
+  gap: 10px;
+  max-width: 560px;
+  margin: 0 auto;
+  flex-wrap: wrap;
+}
+
+.check-form input {
+  flex: 1 1 250px;
+  padding: 15px 16px;
+  font-size: 0.92rem;
+  font-family: var(--mono);
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  outline: none;
+  caret-color: var(--red);
+  transition: border-color 0.2s ease, box-shadow 0.25s ease, background 0.2s ease;
+}
+
+.check-form input::placeholder { color: #6b4a50; }
+
+.check-form input:focus {
+  border-color: var(--red);
+  background: rgba(255, 42, 60, 0.04);
+  box-shadow: 0 0 0 1px var(--red), 0 0 30px -8px var(--red-glow), inset 0 0 24px -18px var(--red);
+}
+
+.btn {
+  position: relative;
+  overflow: hidden;
+  padding: 15px 26px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-family: var(--mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #fff;
+  background: linear-gradient(100deg, #ff2a3c, #a30016);
+  border: 1px solid rgba(255, 90, 106, 0.5);
+  border-radius: 3px;
+  cursor: pointer;
+  box-shadow: 0 0 24px -6px var(--red-glow), inset 0 0 20px -14px #fff;
+  transition: transform 0.15s ease, box-shadow 0.25s ease, opacity 0.2s ease;
+}
+
+.btn::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -130%;
+  width: 55%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.38), transparent);
+  animation: shine 3.2s ease-in-out infinite;
+}
+
+@keyframes shine {
+  0%        { left: -130%; }
+  55%, 100% { left: 165%; }
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 38px -6px var(--red-glow), inset 0 0 24px -12px #fff;
+}
+
+.btn:active { transform: translateY(0); }
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: progress;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn:focus-visible,
+.check-form input:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--red-bright);
+  outline-offset: 3px;
+}
+
+.form-note {
+  font-size: 0.76rem;
+  color: var(--muted);
+  margin-top: 18px;
+  letter-spacing: 0.03em;
+  transition: color 0.2s ease;
+}
+
+/* ================= TERMINAL ================= */
+
+#scan {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 0 0 10px;
+  scroll-margin-top: 90px;
+}
+
+.terminal {
+  background: rgba(6, 4, 4, 0.9);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  box-shadow: 0 0 50px -18px var(--red-glow), inset 0 0 60px -40px var(--red);
+  overflow: hidden;
+  animation: rise 0.3s ease both;
+}
+
+.terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(255, 42, 60, 0.06);
+  border-bottom: 1px solid var(--border);
+}
+
+.terminal-bar .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #3a1a1e;
+}
+
+.terminal-bar .dot.r { background: var(--red); box-shadow: 0 0 8px var(--red); }
+.terminal-bar .dot.y { background: #7a4a10; }
+.terminal-bar .dot.g { background: #1e4a2a; }
+
+.terminal-title {
+  margin-left: 10px;
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.terminal-body {
+  padding: 18px 18px 20px;
+  font-size: 0.82rem;
+  min-height: 150px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.terminal-body .line {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-bottom: 3px;
+  color: var(--red-pale);
+}
+
+.terminal-body .line.cmd   { color: #fff; }
+.terminal-body .line.dim   { color: #7d5a5f; }
+.terminal-body .line.ok    { color: var(--red-pale); }
+.terminal-body .line.alert {
+  color: var(--red);
+  text-shadow: 0 0 10px var(--red-glow);
+  font-weight: 700;
+}
+.terminal-body .line.safe {
+  color: #ffb9c2;
+  text-shadow: 0 0 10px rgba(255, 154, 165, 0.5);
+  font-weight: 700;
+}
+
+.caret {
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  background: var(--red);
+  box-shadow: 0 0 10px var(--red);
+  vertical-align: -2px;
+  animation: blink 1s steps(1) infinite;
+}
+
+@keyframes blink {
+  0%, 49%  { opacity: 1; }
+  50%, 100%{ opacity: 0; }
+}
+
+/* progress bar */
+.progress {
+  height: 4px;
+  margin: 0 18px 18px;
+  background: rgba(255, 42, 60, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #a30016, #ff2a3c, #ff7a5a);
+  box-shadow: 0 0 14px var(--red-glow);
+  transition: width 0.15s linear;
+}
+
+/* ================= RESULTS ================= */
+
+#results {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 0 0 40px;
+  scroll-margin-top: 90px;
+}
+
+[hidden] { display: none !important; }
+
+.card {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 30px;
+  box-shadow: 0 0 60px -22px var(--red-glow), inset 0 0 70px -50px var(--red);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  overflow: hidden;
+  animation: rise 0.4s ease both;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* HUD corner brackets */
+.card::before,
+.card::after {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--red);
+  opacity: 0.85;
+}
+
+.card::before {
+  top: -1px;
+  left: -1px;
+  border-right: none;
+  border-bottom: none;
+}
+
+.card::after {
+  bottom: -1px;
+  right: -1px;
+  border-left: none;
+  border-top: none;
+}
+
+/* sweeping scan line inside card */
+.card-scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 100px;
+  top: -110px;
+  background: linear-gradient(180deg, transparent, rgba(255, 42, 60, 0.10), transparent);
+  animation: cardScan 4.5s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes cardScan {
+  0%   { top: -110px; }
+  100% { top: 110%; }
+}
+
+.status {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 1;
+}
+
+.status .icon {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  font-size: 1.4rem;
+  font-weight: 700;
+  border: 1px solid currentColor;
+}
+
+.status.safe .icon {
+  color: var(--red-pale);
+  background: rgba(255, 154, 165, 0.08);
+  box-shadow: 0 0 26px -10px var(--red-pale), inset 0 0 22px -14px var(--red-pale);
+}
+
+.status.warn .icon {
+  color: var(--amber);
+  background: rgba(255, 176, 32, 0.08);
+  box-shadow: 0 0 26px -10px var(--amber), inset 0 0 22px -14px var(--amber);
+}
+
+.status.bad .icon {
+  color: var(--red);
+  background: var(--red-soft);
+  box-shadow: 0 0 30px -8px var(--red), inset 0 0 24px -14px var(--red);
+  animation: pulseGlow 1.6s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 30px -8px var(--red), inset 0 0 24px -14px var(--red); }
+  50%      { box-shadow: 0 0 46px -4px var(--red), inset 0 0 30px -12px var(--red); }
+}
+
+.status-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  color: var(--muted);
+}
+
+.status.safe .status-label { color: var(--red-pale); }
+.status.warn .status-label { color: var(--amber); }
+.status.bad  .status-label { color: var(--red); text-shadow: 0 0 10px var(--red-glow); }
+
+.status h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  letter-spacing: -0.01em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.status p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  word-break: break-all;
+}
+
+/* stat row */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 26px;
+  position: relative;
+  z-index: 1;
+}
+
+.stat {
+  background: rgba(255, 42, 60, 0.045);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 14px 16px;
+}
+
+.stat .k {
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.stat .v {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin-top: 4px;
+  color: var(--red-bright);
+  text-shadow: 0 0 14px var(--red-glow);
+}
+
+/* breach list */
+.breach-list {
+  list-style: none;
+  margin: 24px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.breach-list li {
+  background: rgba(255, 42, 60, 0.035);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--red);
+  border-radius: 3px;
+  padding: 14px 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.breach-list li:hover {
+  background: rgba(255, 42, 60, 0.09);
+  border-color: var(--border-strong);
+  transform: translateX(3px);
+}
+
+.breach-list .name {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.86rem;
+}
+
+.breach-list .meta {
+  color: var(--muted);
+  font-size: 0.74rem;
+  margin-top: 4px;
+  letter-spacing: 0.02em;
+}
+
+.tag {
+  align-self: flex-start;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 2px;
+  border: 1px solid var(--border-strong);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tag.severe {
+  color: #fff;
+  background: var(--red);
+  border-color: var(--red);
+  box-shadow: 0 0 18px -4px var(--red);
+  animation: pulseGlow 1.8s ease-in-out infinite;
+}
+
+/* ================= TIPS ================= */
+
+.section-head {
+  text-align: center;
+  max-width: 640px;
+  margin: 0 auto 44px;
+}
+
+.section-head h2 {
+  font-size: clamp(1.4rem, 3.4vw, 2rem);
+  letter-spacing: 0.02em;
+  margin: 0 0 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+  text-shadow: 0 0 26px rgba(255, 42, 60, 0.28);
+}
+
+.section-head h2::before { content: "[ "; color: var(--red); }
+.section-head h2::after  { content: " ]"; color: var(--red); }
+
+.section-head p {
+  color: var(--muted);
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 14px;
+}
+
+.tip {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 24px 22px;
+  overflow: hidden;
+  transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.3s ease;
+}
+
+.tip::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--red), transparent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.35s ease;
+}
+
+.tip:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-3px);
+  box-shadow: 0 0 44px -20px var(--red-glow);
+}
+
+.tip:hover::before { transform: scaleX(1); }
+
+.tip .num {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--red);
+  text-shadow: 0 0 12px var(--red-glow);
+}
+
+.tip h3 {
+  margin: 12px 0 8px;
+  font-size: 0.98rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.tip p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+/* ================= FOOTER ================= */
+
+footer {
+  border-top: 1px solid var(--border);
+  padding: 30px 5%;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  background: rgba(5, 5, 6, 0.7);
+}
+
+footer a:hover {
+  color: var(--red-bright);
+  text-shadow: 0 0 10px var(--red-glow);
+}
+
+/* ================= MOTION PREFS ================= */
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ================= RESPONSIVE ================= */
+
+@media (max-width: 900px) {
+  .hud { display: none; }
+}
+
+@media (max-width: 720px) {
+  nav { display: none; }
+  section { padding: 54px 0; }
+  .hero { padding-top: 52px; }
+  .card { padding: 22px 18px; }
+  .stats { grid-template-columns: 1fr; }
+  .terminal-body { font-size: 0.76rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- live background layers -->
+<canvas id="matrix" aria-hidden="true"></canvas>
+<div class="overlay-scan" aria-hidden="true"></div>
+<div class="overlay-vignette" aria-hidden="true"></div>
+
+<header>
+  <a class="logo" href="#top">
+    <span class="dot" aria-hidden="true"></span>
+    root@exposed:~$
+  </a>
+
+  <nav aria-label="Main navigation">
+    <ul>
+      <li><a href="#check">scan</a></li>
+      <li><a href="#tips">protect</a></li>
+      <li><a href="#about">about</a></li>
+    </ul>
+  </nav>
+
+  <div class="hud" aria-hidden="true">
+    <span>NODE <b id="nodeId">0x0000</b></span>
+    <span>TIME <b id="clock">--:--:--</b></span>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ============ HERO / CHECK ============ -->
+  <section class="hero" id="check">
+    <span class="pill">breach intelligence active</span>
+
+    <h1 class="glitch" data-text="AM I EXPOSED?">
+      AM I <span class="grad">EXPOSED</span>?
+    </h1>
+
+    <p class="lede">
+      Enter an identifier to query the breach corpus. Results are generated
+      locally — nothing leaves this machine.
+    </p>
+
+    <form class="check-form" id="checkForm" novalidate>
+      <label for="email" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Email address</label>
+      <input
+        type="email"
+        id="email"
+        name="email"
+        placeholder="target@domain.com"
+        autocomplete="email"
+        spellcheck="false"
+        required
+        aria-describedby="formNote">
+      <button type="submit" class="btn" id="submitBtn">run scan</button>
+    </form>
+
+    <p class="form-note" id="formNote" role="status" aria-live="polite">
+      [ demo mode ] payload never leaves the browser
+    </p>
+  </section>
+
+  <!-- ============ TERMINAL ============ -->
+  <section id="scan" hidden aria-live="polite">
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="dot r"></span>
+        <span class="dot y"></span>
+        <span class="dot g"></span>
+        <span class="terminal-title">scan.log — live output</span>
+      </div>
+      <div class="terminal-body" id="terminalBody"></div>
+      <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+  </section>
+
+  <!-- ============ RESULTS ============ -->
+  <section id="results" hidden aria-live="polite">
+    <div class="card" id="resultCard"></div>
+  </section>
+
+  <!-- ============ TIPS ============ -->
+  <section id="tips">
+    <div class="section-head">
+      <h2>countermeasures</h2>
+      <p>Execute in order. The first three take under ten minutes total.</p>
+    </div>
+
+    <div class="grid">
+      <article class="tip">
+        <span class="num">01</span>
+        <h3>Rotate credentials</h3>
+        <p>Start with the breached account, then anywhere you reused that password. Reuse turns one breach into ten.</p>
+      </article>
+
+      <article class="tip">
+        <span class="num">02</span>
+        <h3>Enable 2FA</h3>
+        <p>Use an authenticator app or hardware key over SMS. It blocks most takeovers even when the password leaks.</p>
+      </article>
+
+      <article class="tip">
+        <span class="num">03</span>
+        <h3>Deploy a vault</h3>
+        <p>Unique, random passwords per site — you only memorize one strong master passphrase.</p>
+      </article>
+
+      <article class="tip">
+        <span class="num">04</span>
+        <h3>Assume phishing</h3>
+        <p>Leaked addresses attract targeted scams. Treat unexpected login alerts and invoices as hostile until verified.</p>
+      </article>
+
+      <article class="tip">
+        <span class="num">05</span>
+        <h3>Freeze credit</h3>
+        <p>If IDs or financial data leaked, a freeze with the major bureaus blocks new accounts in your name.</p>
+      </article>
+
+      <article class="tip">
+        <span class="num">06</span>
+        <h3>Purge dead accounts</h3>
+        <p>Delete services you no longer use. An account that doesn't exist cannot be breached.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ ABOUT ============ -->
+  <section id="about">
+    <div class="section-head">
+      <h2>about</h2>
+      <p>
+        Front-end simulation. Results are generated locally with a deterministic
+        hash so the same input always yields the same output. A production build
+        would query a breach corpus from a server-side endpoint — API keys must
+        never live in client-side JavaScript.
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <span>© <span id="year"></span> AM I EXPOSED? // demo build</span>
+  <span>Not affiliated with Have I Been Pwned or any breach-notification service.</span>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  var prefersReduced = window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ==========================================================
+   * 1. MATRIX RAIN  (red on black, throttled)
+   * ========================================================== */
+  (function matrixRain() {
+    var canvas = document.getElementById('matrix');
+    if (!canvas || prefersReduced) return;
+
+    var ctx = canvas.getContext('2d');
+    var CHARS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789ABCDEF<>/\\|=+-*#$%&@';
+    var FONT_SIZE = 16;
+    var FPS = 24;
+    var frameDelay = 1000 / FPS;
+
+    var cols = 0;
+    var drops = [];
+    var last = 0;
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      cols = Math.ceil(canvas.width / FONT_SIZE);
+      drops = [];
+      for (var i = 0; i < cols; i++) {
+        drops[i] = Math.random() * -60;
+      }
+      ctx.font = FONT_SIZE + 'px monospace';
+    }
+
+    function draw(now) {
+      requestAnimationFrame(draw);
+      if (now - last < frameDelay) return;
+      last = now;
+
+      // fade previous frame
+      ctx.fillStyle = 'rgba(5, 5, 6, 0.09)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.font = FONT_SIZE + 'px monospace';
+      ctx.textBaseline = 'top';
+
+      for (var i = 0; i < cols; i++) {
+        var ch = CHARS.charAt(Math.floor(Math.random() * CHARS.length));
+        var x = i * FONT_SIZE;
+        var y = drops[i] * FONT_SIZE;
+
+        // bright head
+        ctx.fillStyle = '#ff6a78';
+        ctx.shadowColor = '#ff2a3c';
+        ctx.shadowBlur = 9;
+        ctx.fillText(ch, x, y);
+        ctx.shadowBlur = 0;
+
+        // dim trailing character
+        ctx.fillStyle = 'rgba(255, 42, 60, 0.35)';
+        ctx.fillText(CHARS.charAt(Math.floor(Math.random() * CHARS.length)), x, y - FONT_SIZE);
+
+        drops[i] += 1;
+
+        if (y > canvas.height && Math.random() > 0.975) {
+          drops[i] = Math.random() * -20;
+        }
+      }
+    }
+
+    var resizeTimer;
+    window.addEventListener('resize', function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(resize, 150);
+    });
+
+    resize();
+    requestAnimationFrame(draw);
+  })();
+
+  /* ==========================================================
+   * 2. HUD CLOCK + NODE ID
+   * ========================================================== */
+  (function hud() {
+    var clock = document.getElementById('clock');
+    var nodeId = document.getElementById('nodeId');
+
+    if (nodeId) {
+      nodeId.textContent = '0x' +
+        Math.floor(Math.random() * 65535).toString(16).toUpperCase().padStart(4, '0');
+    }
+
+    function tick() {
+      var d = new Date();
+      if (clock) {
+        clock.textContent =
+          String(d.getHours()).padStart(2, '0') + ':' +
+          String(d.getMinutes()).padStart(2, '0') + ':' +
+          String(d.getSeconds()).padStart(2, '0');
+      }
+    }
+
+    tick();
+    setInterval(tick, 1000);
+  })();
+
+  /* ==========================================================
+   * 3. DEMO BREACH DATA
+   * ========================================================== */
+  var BREACHES = [
+    { name: 'NimbusCloud',      year: 2019, records: '2.1M',  classes: ['emails', 'hashed passwords'], severe: false },
+    { name: 'FitTrack Pro',     year: 2021, records: '840K',  classes: ['emails', 'names', 'birth dates'], severe: false },
+    { name: 'LumenForums',      year: 2016, records: '13.4M', classes: ['emails', 'hashed passwords', 'IPs'], severe: true },
+    { name: 'CardVault Retail', year: 2023, records: '5.7M',  classes: ['emails', 'card data', 'phones'], severe: true },
+    { name: 'PixelPress',       year: 2014, records: '410K',  classes: ['emails', 'usernames'], severe: false },
+    { name: 'QuickRide',        year: 2022, records: '1.9M',  classes: ['emails', 'phones', 'trip history'], severe: false },
+    { name: 'ScholarlyNet',     year: 2018, records: '620K',  classes: ['emails', 'hashed passwords'], severe: false }
+  ];
+
+  /* ==========================================================
+   * 4. DOM REFERENCES
+   * ========================================================== */
+  var form        = document.getElementById('checkForm');
+  var input       = document.getElementById('email');
+  var button      = document.getElementById('submitBtn');
+  var note        = document.getElementById('formNote');
+  var scanSection = document.getElementById('scan');
+  var terminalBody= document.getElementById('terminalBody');
+  var progressFill= document.getElementById('progressFill');
+  var results     = document.getElementById('results');
+  var resultCard  = document.getElementById('resultCard');
+
+  var DEFAULT_NOTE = '[ demo mode ] payload never leaves the browser';
+
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  /* ==========================================================
+   * 5. HELPERS
+   * ========================================================== */
+  function hashString(str) {
+    var h = 2166136261;
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  function seededRandom(seed) {
+    return function () {
+      seed |= 0;
+      seed = (seed + 0x6D2B79F5) | 0;
+      var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function isValidEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value);
+  }
+
+  function sleep(ms) {
+    return new Promise(function (res) { setTimeout(res, ms); });
+  }
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  /* deterministic demo result */
+  function runCheck(email) {
+    var rand = seededRandom(hashString(email.toLowerCase().trim()));
+    var found = [];
+    for (var i = 0; i < BREACHES.length; i++) {
+      if (rand() < 0.28) found.push(BREACHES[i]);
+    }
+    return { email: email, breaches: found };
+  }
+
+  /* ==========================================================
+   * 6. TERMINAL SEQUENCE
+   * ========================================================== */
+  function setProgress(pct) {
+    progressFill.style.width = pct + '%';
+  }
+
+  function animateProgress(from, to, duration) {
+    return new Promise(function (resolve) {
+      if (prefersReduced) { setProgress(to); resolve(); return; }
+
+      var start = performance.now();
+      function step(now) {
+        var t = Math.min(1, (now - start) / duration);
+        // ease-out
+        var eased = 1 - Math.pow(1 - t, 2);
+        setProgress(from + (to - from) * eased);
+        if (t < 1) requestAnimationFrame(step);
+        else resolve();
+      }
+      requestAnimationFrame(step);
+    });
+  }
+
+  function addLine(text, cls) {
+    var line = el('div', 'line ' + (cls || ''));
+    line.textContent = text;
+    terminalBody.appendChild(line);
+    terminalBody.scrollTop = terminalBody.scrollHeight;
+    return line;
+  }
+
+  function typeLine(text, cls, speed) {
+    return new Promise(function (resolve) {
+      var line = el('div', 'line ' + (cls || ''));
+      var span = el('span');
+      line.appendChild(span);
+      terminalBody.appendChild(line);
+
+      if (prefersReduced) {
+        span.textContent = text;
+        terminalBody.scrollTop = terminalBody.scrollHeight;
+        resolve(line);
+        return;
+      }
+
+      var i = 0;
+      (function next() {
+        if (i >= text.length) {
+          terminalBody.scrollTop = terminalBody.scrollHeight;
+          resolve(line);
+          return;
+        }
+        span.textContent += text.charAt(i++);
+        terminalBody.scrollTop = terminalBody.scrollHeight;
+        setTimeout(next, speed || 9);
+      })();
+    });
+  }
+
+  async function runScanSequence(email, data) {
+    scanSection.hidden = false;
+    terminalBody.textContent = '';
+    setProgress(0);
+
+    scanSection.scrollIntoView({ behavior: prefersReduced ? 'auto' : 'smooth', block: 'center' });
+
+    await typeLine('$ ./exposure-scan --target ' + email, 'cmd', 11);
+    await sleep(140);
+
+    await typeLine('[·] establishing secure channel ......... OK', 'dim', 5);
+    await animateProgress(0, 28, 420);
+    await sleep(80);
+
+    await typeLine('[·] loading breach corpus (11.4B records) OK', 'dim', 5);
+    await animateProgress(28, 61, 520);
+    await sleep(80);
+
+    await typeLine('[·] hashing identifier .................. OK', 'dim', 5);
+    await animateProgress(61, 84, 400);
+    await sleep(100);
+
+    await typeLine('[·] correlating leaked datasets ......... OK', 'dim', 5);
+    await animateProgress(84, 100, 460);
+    await sleep(180);
+
+    var count = data.breaches.length;
+    var severe = data.breaches.some(function (b) { return b.severe; });
+
+    if (count === 0) {
+      await typeLine('[✓] 0 matches in corpus', 'safe', 12);
+      await sleep(120);
+      addLine('> status: CLEAR', 'safe');
+    } else {
+      await typeLine('[!] ' + count + ' match' + (count > 1 ? 'es' : '') + ' located', 'alert', 12);
+      await sleep(120);
+      data.breaches.forEach(function (b) {
+        addLine('    └─ ' + b.name + ' (' + b.year + ')', 'dim');
+      });
+      await sleep(120);
+      addLine('> status: ' + (severe ? 'COMPROMISED — SENSITIVE DATA' : 'EXPOSED'), 'alert');
+    }
+
+    await sleep(300);
+    addLine('> rendering report...', 'dim');
+    await sleep(320);
+
+    renderResult(data);
+  }
+
+  /* ==========================================================
+   * 7. RESULT RENDERING
+   * ========================================================== */
+  function renderResult(data) {
+    resultCard.textContent = '';
+
+    // sweeping scan line
+    resultCard.appendChild(el('div', 'card-scan'));
+
+    var count  = data.breaches.length;
+    var severeCount = data.breaches.filter(function (b) { return b.severe; }).length;
+    var severe = severeCount > 0;
+    var level  = count === 0 ? 'safe' : (severe ? 'bad' : 'warn');
+
+    /* --- status block --- */
+    var status = el('div', 'status ' + level);
+
+    var icon = el('div', 'icon', count === 0 ? '✓' : (severe ? '✕' : '!'));
+    icon.setAttribute('aria-hidden', 'true');
+    status.appendChild(icon);
+
+    var textWrap = el('div');
+    var label, heading, sub;
+
+    if (count === 0) {
+      label   = '// status: secure';
+      heading = 'No known exposures';
+      sub     = data.email + ' did not appear in this demo corpus. Remain vigilant.';
+    } else if (severe) {
+      label   = '// status: compromised';
+      heading = 'Found in ' + count + ' breach' + (count > 1 ? 'es' : '');
+      sub     = data.email + ' appears in records containing passwords or financial data. Act now.';
+    } else {
+      label   = '// status: exposed';
+      heading = 'Found in ' + count + ' breach' + (count > 1 ? 'es' : '');
+      sub     = data.email + ' appears in the following leaked datasets.';
+    }
+
+    textWrap.appendChild(el('div', 'status-label', label));
+    textWrap.appendChild(el('h2', null, heading));
+    textWrap.appendChild(el('p', null, sub));
+    status.appendChild(textWrap);
+
+    resultCard.appendChild(status);
+
+    /* --- stat row --- */
+    var risk = count === 0 ? 'LOW' : (severe ? 'CRITICAL' : 'ELEVATED');
+
+    var stats = el('div', 'stats');
+
+    var s1 = el('div', 'stat');
+    s1.appendChild(el('div', 'k', 'exposures'));
+    s1.appendChild(el('div', 'v', String(count)));
+
+    var s2 = el('div', 'stat');
+    s2.appendChild(el('div', 'k', 'critical'));
+    s2.appendChild(el('div', 'v', String(severeCount)));
+
+    var s3 = el('div', 'stat');
+    s3.appendChild(el('div', 'k', 'risk level'));
+    s3.appendChild(el('div', 'v', risk));
+
+    stats.appendChild(s1);
+    stats.appendChild(s2);
+    stats.appendChild(s3);
+    resultCard.appendChild(stats);
+
+    /* --- breach list --- */
+    if (count > 0) {
+      var list = el('ul', 'breach-list');
+
+      data.breaches.forEach(function (b) {
+        var li = el('li');
+
+        var left = el('div');
+        left.appendChild(el('div', 'name', b.name));
+        left.appendChild(el('div', 'meta',
+          b.year + '  ·  ' + b.records + ' records  ·  ' + b.classes.join(', ')
+        ));
+
+        var tag = el('span', 'tag' + (b.severe ? ' severe' : ''),
+          b.severe ? 'critical' : 'credentials');
+
+        li.appendChild(left);
+        li.appendChild(tag);
+        list.appendChild(li);
+      });
+
+      resultCard.appendChild(list);
+    }
+
+    results.hidden = false;
+    results.scrollIntoView({ behavior: prefersReduced ? 'auto' : 'smooth', block: 'start' });
+  }
+
+  /* ==========================================================
+   * 8. FORM HANDLING
+   * ========================================================== */
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+
+    var value = input.value.trim();
+
+    if (!isValidEmail(value)) {
+      note.textContent = '[!] invalid identifier — expected format: user@domain.com';
+      note.style.color = 'var(--red)';
+      input.focus();
+      return;
+    }
+
+    note.style.color = '';
+    note.textContent = '[ running ] querying corpus...';
+    button.disabled = true;
+    input.disabled = true;
+
+    var data = runCheck(value);
+
+    // Small delay so the terminal reveals after the click registers.
+    setTimeout(async function () {
+      await runScanSequence(value, data);
+
+      button.disabled = false;
+      input.disabled = false;
+      note.textContent = '[ complete ] scan finished — no data left this browser';
+    }, 220);
+  });
+
+  // Clear error state on edit
+  input.addEventListener('input', function () {
+    note.style.color = '';
+    note.textContent = DEFAULT_NOTE;
+  });
+})();
+</script>
+
+</body>
+</html>
